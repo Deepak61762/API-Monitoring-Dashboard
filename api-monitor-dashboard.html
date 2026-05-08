@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Monitor Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #1e2631;
+      --border: rgba(255,255,255,0.1);
+      --border2: rgba(255,255,255,0.18);
+      --text: #e6edf3;
+      --text2: #8b949e;
+      --text3: #484f58;
+      --green: #3fb950;
+      --green-bg: rgba(63,185,80,0.12);
+      --red: #f85149;
+      --red-bg: rgba(248,81,73,0.12);
+      --amber: #d29922;
+      --amber-bg: rgba(210,153,34,0.12);
+      --blue: #58a6ff;
+      --blue-bg: rgba(88,166,255,0.1);
+      --radius: 8px;
+      --radius-lg: 12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ─── Layout ─── */
+    .app { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .logo { font-size: 20px; font-weight: 600; letter-spacing: -.3px; }
+    .logo span { color: var(--blue); }
+
+    /* ─── Tabs ─── */
+    .tabs { display: flex; gap: 2px; margin-bottom: 20px; background: var(--surface); border-radius: var(--radius); padding: 4px; width: fit-content; }
+    .tab {
+      padding: 6px 16px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text2);
+      font-size: 13px;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .tab.active { background: var(--surface2); color: var(--text); font-weight: 500; }
+    .tab:hover:not(.active) { color: var(--text); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ─── Topbar / Input Row ─── */
+    .input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    input[type="text"], input[type="number"], select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    input[type="text"]:focus, input[type="number"]:focus, select:focus { border-color: var(--blue); }
+    .input-url { flex: 1; min-width: 220px; }
+    select { appearance: none; cursor: pointer; }
+
+    /* ─── Buttons ─── */
+    .btn {
+      padding: 8px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background .15s, border-color .15s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: var(--surface2); border-color: var(--border2); }
+    .btn:active { transform: scale(0.98); }
+    .btn.primary { background: var(--blue-bg); border-color: rgba(88,166,255,0.3); color: var(--blue); }
+    .btn.primary:hover { background: rgba(88,166,255,0.18); }
+    .btn.success { background: var(--green-bg); border-color: rgba(63,185,80,0.3); color: var(--green); }
+    .btn.success:hover { background: rgba(63,185,80,0.2); }
+    .btn.danger { background: var(--red-bg); border-color: rgba(248,81,73,0.3); color: var(--red); }
+    .btn.danger:hover { background: rgba(248,81,73,0.2); }
+    .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    /* ─── Metric Cards ─── */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px 18px;
+    }
+    .metric-label { font-size: 12px; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+    .metric-value { font-size: 26px; font-weight: 600; line-height: 1; }
+    .metric-value.green { color: var(--green); }
+    .metric-value.red { color: var(--red); }
+    .metric-value.blue { color: var(--blue); }
+
+    /* ─── Badges ─── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 99px;
+      letter-spacing: .03em;
+    }
+    .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+    .badge.ok { background: var(--green-bg); color: var(--green); }
+    .badge.ok::before { background: var(--green); }
+    .badge.fail { background: var(--red-bg); color: var(--red); }
+    .badge.fail::before { background: var(--red); }
+    .badge.pending { background: var(--surface2); color: var(--text2); }
+    .badge.pending::before { background: var(--text3); }
+    .badge.anomaly { background: var(--amber-bg); color: var(--amber); }
+    .badge.anomaly::before { background: var(--amber); animation: pulse 1s infinite; }
+    .badge.running { background: var(--green-bg); color: var(--green); }
+    .badge.running::before { background: var(--green); animation: pulse 1s infinite; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ─── Endpoint List ─── */
+    .endpoint-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+    .endpoint-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      transition: border-color .15s;
+    }
+    .endpoint-row:hover { border-color: var(--border2); }
+    .endpoint-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .endpoint-url { font-size: 13px; flex: 1; min-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'SF Mono', 'Fira Code', monospace; }
+    .endpoint-method { font-size: 11px; font-weight: 700; color: var(--blue); background: var(--blue-bg); padding: 2px 7px; border-radius: 4px; }
+    .stat-mini { font-size: 12px; color: var(--text2); }
+    .uptime-bar { display: flex; gap: 2px; }
+    .uptime-tick { width: 6px; height: 10px; border-radius: 2px; background: var(--text3); }
+    .uptime-tick.ok { background: var(--green); }
+    .uptime-tick.fail { background: var(--red); }
+
+    /* ─── Anomaly Alert ─── */
+    .anomaly-box {
+      background: var(--amber-bg);
+      border: 1px solid rgba(210,153,34,.3);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .anomaly-title { font-size: 13px; font-weight: 600; color: var(--amber); margin-bottom: 8px; }
+    .anomaly-item { font-size: 12px; color: var(--amber); padding: 2px 0; }
+
+    /* ─── Chart ─── */
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .chart-title { font-size: 13px; font-weight: 500; }
+    .chart-updated { font-size: 12px; color: var(--text2); }
+
+    /* ─── Logs ─── */
+    .log-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 0;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .log-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 1; }
+    .log-entry { display: flex; gap: 10px; padding: 6px 16px; border-bottom: 1px solid var(--border); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
+    .log-entry:last-child { border-bottom: none; }
+    .log-ts { color: var(--text3); min-width: 70px; }
+    .log-msg.ok { color: var(--green); }
+    .log-msg.fail { color: var(--red); }
+    .log-msg.warn { color: var(--amber); }
+    .log-msg.info { color: var(--text2); }
+
+    /* ─── Config ─── */
+    .config-section { margin-bottom: 24px; }
+    .config-section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--text2); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .config-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .config-label { font-size: 13px; color: var(--text2); min-width: 200px; }
+    .config-row input, .config-row select { flex: 1; min-width: 160px; }
+    .config-hint { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+    /* ─── Empty state ─── */
+    .empty { text-align: center; padding: 40px 20px; color: var(--text2); font-size: 13px; }
+    .empty-icon { font-size: 32px; margin-bottom: 10px; opacity: .4; }
+
+    /* ─── Scrollbar ─── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="header-left">
+      <div class="logo">API <span>Monitor</span></div>
+      <span id="run-badge" class="badge pending">Idle</span>
+    </div>
+    <div class="btn-group">
+      <button class="btn success" onclick="startMonitor()">▶ Start</button>
+      <button class="btn danger" onclick="stopMonitor()">⏸ Stop</button>
+      <button class="btn" onclick="clearAll()">✕ Clear all</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('dashboard', this)">Dashboard</button>
+    <button class="tab" onclick="switchTab('logs', this)">Logs</button>
+    <button class="tab" onclick="switchTab('config', this)">Configuration</button>
+  </div>
+
+  <!-- ═══ DASHBOARD ═══ -->
+  <div id="tab-dashboard" class="panel active">
+
+    <div class="input-row">
+      <input type="text" id="url-input" class="input-url" placeholder="https://api.example.com/health" />
+      <select id="method-sel">
+        <option>GET</option>
+        <option>POST</option>
+        <option>HEAD</option>
+      </select>
+      <select id="interval-sel" onchange="updateInterval()">
+        <option value="5000">Every 5s</option>
+        <option value="10000" selected>Every 10s</option>
+        <option value="30000">Every 30s</option>
+        <option value="60000">Every 1 min</option>
+        <option value="300000">Every 5 min</option>
+        <option value="600000">Every 10 min</option>
+      </select>
+      <button class="btn primary" onclick="addApi()">+ Add endpoint</button>
+    </div>
+
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-label">Endpoints</div>
+        <div class="metric-value blue" id="m-count">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Avg response</div>
+        <div class="metric-value" id="m-avg">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Success rate</div>
+        <div class="metric-value" id="m-sr">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Total checks</div>
+        <div class="metric-value" id="m-total">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Anomalies</div>
+        <div class="metric-value" id="m-anom">0</div>
+      </div>
+    </div>
+
+    <div id="anomaly-box" class="anomaly-box">
+      <div class="anomaly-title">⚠ Anomalies detected</div>
+      <div id="anomaly-list"></div>
+    </div>
+
+    <div class="endpoint-list" id="api-list">
+      <div class="empty">
+        <div class="empty-icon">📡</div>
+        Add an API endpoint above to begin monitoring.
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Response time (ms)</span>
+        <span class="chart-updated" id="chart-updated"></span>
+      </div>
+      <canvas id="perf-chart" height="100"></canvas>
+    </div>
+
+  </div>
+
+  <!-- ═══ LOGS ═══ -->
+  <div id="tab-logs" class="panel">
+    <div class="log-box">
+      <div class="log-header">
+        <span style="font-size:13px;font-weight:500">Event log</span>
+        <button class="btn" onclick="clearLogs()" style="padding:4px 10px;font-size:12px">Clear</button>
+      </div>
+      <div id="log-entries">
+        <div class="log-entry"><span class="log-ts">—</span><span class="log-msg info">No events yet.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CONFIG ═══ -->
+  <div id="tab-config" class="panel">
+    <div class="config-section">
+      <div class="config-section-title">Cron schedule</div>
+      <div class="config-row">
+        <label class="config-label">Check interval</label>
+        <select id="cfg-interval" onchange="document.getElementById('interval-sel').value=this.value;updateInterval()">
+          <option value="5000">Every 5 seconds</option>
+          <option value="10000" selected>Every 10 seconds</option>
+          <option value="30000">Every 30 seconds</option>
+          <option value="60000">Every 1 minute</option>
+          <option value="300000">Every 5 minutes</option>
+          <option value="600000">Every 10 minutes</option>
+        </select>
+      </div>
+      <div class="config-row">
+        <label class="config-label">Request timeout (ms)</label>
+        <input type="number" id="timeout-inp" value="5000" min="500" max="30000" step="500" />
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="config-section-title">Anomaly detection</div>
+      <div class="config-row">
+        <label class="config-label">Slow response threshold (ms)</label>
+        <input type="number" id="slow-thresh" value="1000" min="100" max="10000" step="100" />
+      </div>
+      <div class="config-row">
+        <label class="config-label">Failure streak alert after N failures</label>
+        <input type="number" id="fail-streak" value="3" min="1" max="20" step="1" />
+      </div>
+      <div class="config-row">
+        <label class="config-label">Z-score sensitivity</label>
+        <select id="zscore-sel">
+          <option value="2">Low — flag only strong anomalies (z &gt; 2)</option>
+          <option value="1.5" selected>Medium (z &gt; 1.5)</option>
+          <option value="1">High — flag subtle anomalies (z &gt; 1)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="config-section-title">Storage / MongoDB</div>
+      <div class="config-row">
+        <label class="config-label">Retain last N checks per endpoint</label>
+        <input type="number" id="retain-n" value="50" min="10" max="500" step="10" />
+      </div>
+      <div class="config-row">
+        <label class="config-label">MongoDB URI</label>
+        <input type="text" id="mongo-uri" placeholder="mongodb://localhost:27017/api_monitor" style="font-family:monospace;font-size:12px" />
+      </div>
+      <div class="config-hint">In-browser mode stores data in memory. Wire this URI to your Node.js backend to persist to MongoDB.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ───────────────────────── State ───────────────────────── */
+const COLORS = ['#58a6ff','#3fb950','#f59e0b','#ec4899','#a78bfa','#f97316','#14b8a6','#e879f9'];
+let apis = [];
+let intervalId = null;
+let logs = [];
+let chart = null;
+
+/* ───────────────────────── Tabs ───────────────────────── */
+function switchTab(name, el) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  el.classList.add('active');
+}
+
+/* ───────────────────────── Logging ───────────────────────── */
+function now() { return new Date().toLocaleTimeString(); }
+
+function pushLog(type, msg) {
+  logs.unshift({ type, msg, ts: now() });
+  if (logs.length > 300) logs.pop();
+  renderLogs();
+}
+
+function renderLogs() {
+  const el = document.getElementById('log-entries');
+  if (!logs.length) {
+    el.innerHTML = '<div class="log-entry"><span class="log-ts">—</span><span class="log-msg info">No events yet.</span></div>';
+    return;
+  }
+  el.innerHTML = logs.slice(0, 100).map(l =>
+    `<div class="log-entry"><span class="log-ts">${l.ts}</span><span class="log-msg ${l.type}">${escHtml(l.msg)}</span></div>`
+  ).join('');
+}
+
+function clearLogs() { logs = []; renderLogs(); }
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ───────────────────────── Add / Remove endpoint ───────────────────────── */
+function addApi() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) return;
+  const method = document.getElementById('method-sel').value;
+  const color = COLORS[apis.length % COLORS.length];
+  apis.push({ id: Date.now(), url, method, color, history: [], allChecks: [], failStreak: 0, _anomaly: false, _anomalyMsgs: [] });
+  document.getElementById('url-input').value = '';
+  pushLog('info', `Added endpoint: ${method} ${url}`);
+  renderChart();
+  renderApis();
+  updateCards();
+}
+
+function removeApi(id) {
+  apis = apis.filter(a => a.id !== id);
+  renderChart();
+  renderApis();
+  updateCards();
+  pushLog('info', 'Endpoint removed.');
+}
+
+/* ───────────────────────── Render endpoints ───────────────────────── */
+function renderApis() {
+  const list = document.getElementById('api-list');
+  if (!apis.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">📡</div>Add an API endpoint above to begin monitoring.</div>';
+    return;
+  }
+  list.innerHTML = apis.map(api => {
+    const last = api.history[api.history.length - 1];
+    const status = last ? (last.ok ? 'ok' : 'fail') : 'pending';
+    const label  = last ? (last.ok ? 'OK' : 'FAIL') : 'Pending';
+    const rt = last && last.rt != null ? last.rt + ' ms' : '';
+    const pct = api.allChecks.length
+      ? Math.round(api.allChecks.filter(c => c.ok).length / api.allChecks.length * 100) + '%'
+      : '';
+    const ticks = Array(30).fill(null).map((_, i) => {
+      const c = api.allChecks.slice(-30)[i];
+      return c ? `<div class="uptime-tick ${c.ok ? 'ok' : 'fail'}"></div>` : '<div class="uptime-tick"></div>';
+    }).join('');
+    const anom = api._anomaly ? '<span class="badge anomaly">Anomaly</span>' : '';
+
+    return `
+      <div class="endpoint-row">
+        <div class="endpoint-dot" style="background:${api.color}"></div>
+        <span class="endpoint-method">${api.method}</span>
+        <span class="endpoint-url" title="${escHtml(api.url)}">${escHtml(api.url)}</span>
+        <span class="badge ${status}">${label}</span>
+        ${anom}
+        <span class="stat-mini">${rt}</span>
+        ${pct ? `<span class="stat-mini">${pct} uptime</span>` : ''}
+        <div class="uptime-bar">${ticks}</div>
+        <button class="btn danger" onclick="removeApi(${api.id})" style="padding:4px 10px;font-size:12px">✕</button>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ───────────────────────── Summary cards ───────────────────────── */
+function updateCards() {
+  document.getElementById('m-count').textContent = apis.length;
+  const allRTs = apis.flatMap(a => a.history.filter(h => h.rt != null).map(h => h.rt));
+  document.getElementById('m-avg').textContent = allRTs.length
+    ? Math.round(allRTs.reduce((a,b) => a+b, 0) / allRTs.length) + ' ms' : '—';
+  const all = apis.flatMap(a => a.allChecks);
+  document.getElementById('m-sr').textContent = all.length
+    ? Math.round(all.filter(c => c.ok).length / all.length * 100) + '%' : '—';
+  document.getElementById('m-total').textContent = all.length;
+  document.getElementById('m-anom').textContent = apis.filter(a => a._anomaly).length;
+}
+
+/* ───────────────────────── Chart ───────────────────────── */
+function renderChart() {
+  const canvas = document.getElementById('perf-chart');
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const tick = 'rgba(255,255,255,0.35)';
+  const grid = 'rgba(255,255,255,0.07)';
+
+  const allTs = [...new Set(apis.flatMap(a => a.history.map(h => h.ts)))].slice(-15);
+  const datasets = apis.map(api => ({
+    label: api.url.replace(/https?:\/\//, '').slice(0, 30),
+    data: api.history.slice(-15).map(h => h.rt),
+    borderColor: api.color,
+    backgroundColor: api.color + '20',
+    tension: 0.35,
+    pointRadius: 3,
+    fill: false,
+    borderWidth: 1.5,
+  }));
+
+  if (chart) { chart.data.labels = allTs; chart.data.datasets = datasets; chart.update(); return; }
+
+  chart = new Chart(canvas, {
+    type: 'line',
+    data: { labels: allTs, datasets },
+    options: {
+      responsive: true,
+      animation: { duration: 250 },
+      plugins: { legend: { labels: { color: tick, font: { size: 11 }, boxWidth: 10 } } },
+      scales: {
+        x: { ticks: { color: tick, font: { size: 11 } }, grid: { color: grid }, border: { display: false } },
+        y: { ticks: { color: tick, font: { size: 11 } }, grid: { color: grid }, border: { display: false }, title: { display: true, text: 'ms', color: tick } },
+      },
+    },
+  });
+}
+
+/* ───────────────────────── Anomaly detection ───────────────────────── */
+function detectAnomalies(api) {
+  const slowThresh  = parseInt(document.getElementById('slow-thresh').value)  || 1000;
+  const streakLimit = parseInt(document.getElementById('fail-streak').value)  || 3;
+  const zThresh     = parseFloat(document.getElementById('zscore-sel').value) || 1.5;
+  const retainN     = parseInt(document.getElementById('retain-n').value)     || 50;
+
+  const msgs = [];
+  const last = api.history[api.history.length - 1];
+
+  // Failure streak
+  const tail = api.history.slice(-streakLimit);
+  if (tail.length === streakLimit && tail.every(h => !h.ok)) {
+    msgs.push(`${streakLimit} consecutive failures`);
+  }
+
+  // Slow threshold
+  if (last && last.rt != null && last.rt > slowThresh) {
+    msgs.push(`Slow response: ${last.rt}ms (threshold: ${slowThresh}ms)`);
+  }
+
+  // Z-score
+  const recent = api.allChecks.slice(-retainN).filter(h => h.rt != null).map(h => h.rt);
+  if (recent.length >= 5 && last && last.rt != null) {
+    const mean = recent.reduce((a,b) => a+b, 0) / recent.length;
+    const std  = Math.sqrt(recent.reduce((a,b) => a + (b - mean)**2, 0) / recent.length);
+    if (std > 0) {
+      const z = Math.abs((last.rt - mean) / std);
+      if (z > zThresh) msgs.push(`Statistical outlier: z=${z.toFixed(2)}`);
+    }
+  }
+
+  api._anomaly = msgs.length > 0;
+  api._anomalyMsgs = msgs;
+}
+
+function renderAnomalyBox() {
+  const box  = document.getElementById('anomaly-box');
+  const list = document.getElementById('anomaly-list');
+  const all  = apis.flatMap(a => (a._anomalyMsgs || []).map(m => `${a.url.replace(/https?:\/\//,'').slice(0,40)}: ${m}`));
+  if (all.length) {
+    box.style.display = 'block';
+    list.innerHTML = all.map(a => `<div class="anomaly-item">• ${escHtml(a)}</div>`).join('');
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+/* ───────────────────────── Check cycle ───────────────────────── */
+async function checkApis() {
+  const timeout = parseInt(document.getElementById('timeout-inp').value) || 5000;
+  const ts = now();
+  document.getElementById('chart-updated').textContent = 'Updated ' + ts;
+
+  for (const api of apis) {
+    let ok = false, rt = null;
+    const start = performance.now();
+    try {
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeout);
+      await fetch(api.url, { method: api.method, signal: ctrl.signal, mode: 'no-cors' });
+      clearTimeout(timer);
+      rt = Math.round(performance.now() - start);
+      ok = true;
+    } catch (e) { /* timeout or network error */ }
+
+    const check = { ts, ok, rt };
+    api.history.push(check);
+    api.allChecks.push(check);
+    if (api.history.length  > 15)  api.history.shift();
+    if (api.allChecks.length > parseInt(document.getElementById('retain-n').value || 50))
+      api.allChecks.shift();
+
+    pushLog(ok ? 'ok' : 'fail',
+      ok ? `${api.method} ${api.url} — ${rt}ms` : `${api.method} ${api.url} — FAIL`);
+
+    detectAnomalies(api);
+    if (api._anomalyMsgs.length)
+      api._anomalyMsgs.forEach(m => pushLog('warn', `[Anomaly] ${api.url}: ${m}`));
+  }
+
+  renderChart();
+  renderApis();
+  updateCards();
+  renderAnomalyBox();
+}
+
+/* ───────────────────────── Monitor control ───────────────────────── */
+function startMonitor() {
+  if (!apis.length) { alert('Add at least one endpoint first.'); return; }
+  if (intervalId) clearInterval(intervalId);
+  const ms = parseInt(document.getElementById('interval-sel').value);
+  intervalId = setInterval(checkApis, ms);
+  const badge = document.getElementById('run-badge');
+  badge.className = 'badge running';
+  badge.textContent = 'Running';
+  pushLog('ok', `Monitoring started — interval: ${ms / 1000}s`);
+  checkApis();
+}
+
+function stopMonitor() {
+  if (intervalId) { clearInterval(intervalId); intervalId = null; }
+  const badge = document.getElementById('run-badge');
+  badge.className = 'badge pending';
+  badge.textContent = 'Stopped';
+  pushLog('warn', 'Monitoring stopped.');
+}
+
+function updateInterval() {
+  if (intervalId) { stopMonitor(); startMonitor(); }
+}
+
+function clearAll() {
+  stopMonitor();
+  apis = [];
+  logs = [];
+  if (chart) { chart.data.labels = []; chart.data.datasets = []; chart.update(); }
+  renderApis();
+  updateCards();
+  renderLogs();
+  renderAnomalyBox();
+}
+
+/* ─── init ─── */
+renderApis();
+renderChart();
+renderLogs();
+</script>
+</body>
+</html>
